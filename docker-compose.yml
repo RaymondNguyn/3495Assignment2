@@ -1,0 +1,99 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: datadb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-networks
+
+  mongodb:
+    image: mongo:latest
+    command: mongod --auth
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+      MONGO_INITDB_DATABASE: datadb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - app-networks
+
+  auth_service:
+    build: 
+      context: ./auth_service
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - JWT_SECRET=your_jwt_secret
+    depends_on:
+      - mysql
+    networks:
+      - app-networks
+
+  data_entry:
+    build:
+      context: ./data_entry
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth_service:3000
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=datadb
+    depends_on:
+      - mysql
+      - auth_service
+    networks:
+      - app-networks
+
+  analytics_service:
+    build:
+      context: ./analytics_service
+      dockerfile: Dockerfile
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=datadb
+      - MONGO_URI=mongodb://root:rootpassword@mongodb:27017/
+    depends_on:
+      - mysql
+      - mongodb
+    networks:
+      - app-networks
+
+  results_service:
+    build:
+      context: ./results_service
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth_service:3000
+      - MONGO_URI=mongodb://root:rootpassword@mongodb:27017/
+    depends_on:
+      - mongodb
+      - auth_service
+    networks:
+      - app-networks
+
+networks:
+  app-networks:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  mongo_data:
